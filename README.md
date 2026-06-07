@@ -65,12 +65,22 @@ The workload is a short, intermittent GPU job, so we use [Modal](https://modal.c
 model is Apache-2.0/ungated, so **no Hugging Face token is required**. Model
 weights and outputs are cached on Modal Volumes.
 
+The Modal CLI is **not** a project dependency (its native deps have no macOS
+x86_64 wheels for recent CPython). Install it into the project venv so it can ship
+the local `syco_steering` package:
+
 ```bash
-uv sync --extra modal     # or: pip install modal
+uv pip install modal      # adds the launcher to this project's venv
 modal setup               # authenticate (first time only)
 modal run scripts/app.py  # runs on an L4 GPU
 modal volume get syco-outputs / ./outputs   # retrieve artifacts
 ```
+
+> **Intel macOS note:** `modal` pulls in `cbor2`, which has no macOS x86_64 wheel
+> for CPython 3.13, so pip will compile it from source and needs a Rust toolchain
+> (`brew install rust`, or [rustup](https://rustup.rs)). If you'd rather not
+> install Rust, launch the job from Linux or Google Colab instead (Apple Silicon
+> and Linux get prebuilt wheels and need none of this).
 
 ### Local / Colab
 

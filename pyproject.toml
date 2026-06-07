@@ -20,10 +20,11 @@ gpu = [
     "accelerate>=1.13.0 ; sys_platform == 'linux'",
     "torch>=2.12.0 ; sys_platform == 'linux'",
 ]
-# Modal is only needed to launch the remote GPU job from your machine.
-modal = [
-    "modal>=0.66",
-]
+
+# NOTE: `modal` is intentionally NOT a project dependency. It is a launcher CLI,
+# not part of the package, and its native transitive deps (e.g. cbor2) have no
+# macOS x86_64 wheels for recent CPython, so adding it here breaks `uv sync` on
+# Intel Macs. Install it separately to run the GPU job — see the README.
 
 [dependency-groups]
 dev = [
