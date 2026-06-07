@@ -2,10 +2,12 @@
 
 First-time setup:
     uv pip install modal       # launcher CLI (not a project dependency)
-    modal setup                # authenticate
+    uv run modal setup         # authenticate
 
-Run:        modal run scripts/app.py
-Retrieve:   modal volume get syco-outputs / ./outputs
+Run:        uv run modal run scripts/app.py
+Retrieve:   uv run modal volume get syco-outputs / ./outputs
+
+(modal lives in .venv/bin, so invoke it via `uv run` unless the venv is active.)
 """
 
 import modal

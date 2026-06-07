@@ -67,20 +67,25 @@ weights and outputs are cached on Modal Volumes.
 
 The Modal CLI is **not** a project dependency (its native deps have no macOS
 x86_64 wheels for recent CPython). Install it into the project venv so it can ship
-the local `syco_steering` package:
+the local `syco_steering` package, and invoke it via `uv run` (it lives in
+`.venv/bin`, so a bare `modal` is "command not found" unless the venv is active):
 
 ```bash
-uv pip install modal      # adds the launcher to this project's venv
-modal setup               # authenticate (first time only)
-modal run scripts/app.py  # runs on an L4 GPU
-modal volume get syco-outputs / ./outputs   # retrieve artifacts
+uv pip install modal               # adds the launcher to this project's venv
+uv run modal setup                 # authenticate (first time only)
+uv run modal run scripts/app.py    # runs on a T4 GPU
+uv run modal volume get syco-outputs / ./outputs   # retrieve artifacts
 ```
 
-> **Intel macOS note:** `modal` pulls in `cbor2`, which has no macOS x86_64 wheel
-> for CPython 3.13, so pip will compile it from source and needs a Rust toolchain
-> (`brew install rust`, or [rustup](https://rustup.rs)). If you'd rather not
-> install Rust, launch the job from Linux or Google Colab instead (Apple Silicon
-> and Linux get prebuilt wheels and need none of this).
+> **`uv sync` removes modal.** Because modal is intentionally not in
+> `pyproject.toml`, a later `uv sync` reconciles the venv to the lockfile and
+> uninstalls it — just re-run `uv pip install modal` if that happens.
+
+> **Intel macOS note:** `modal` pulls in `cbor2`, whose accelerator is built with
+> Rust and has no macOS x86_64 wheel, so pip compiles it from source and needs a
+> Rust toolchain (`brew install rust`, or [rustup](https://rustup.rs)) on `PATH`.
+> If you'd rather not install Rust, launch the job from Linux or Google Colab
+> instead (Apple Silicon and Linux get prebuilt wheels and need none of this).
 
 ### Google Colab (no Rust, no GPU box needed)
 
