@@ -82,20 +82,22 @@ modal volume get syco-outputs / ./outputs   # retrieve artifacts
 > install Rust, launch the job from Linux or Google Colab instead (Apple Silicon
 > and Linux get prebuilt wheels and need none of this).
 
-### Local / Colab
+### Google Colab (no Rust, no GPU box needed)
 
-On a Linux GPU box with uv:
+The easiest GPU path. Open [`notebooks/extract_sycophancy_colab.ipynb`](notebooks/extract_sycophancy_colab.ipynb)
+in Colab, set the runtime to GPU, and run all cells — it clones the repo, runs the
+pipeline, checks the acceptance criteria, shows the plots, and downloads the
+artifacts:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/frnkly/ml4g-activation-steering/blob/feat/steering-vector/notebooks/extract_sycophancy_colab.ipynb)
+
+(Update the badge branch from `feat/steering-vector` to `main` once merged.)
+
+### Local Linux GPU box
 
 ```bash
 uv sync --extra gpu
 uv run python scripts/extract_local.py   # writes ./outputs
-```
-
-On Google Colab (PyTorch is pre-installed):
-
-```python
-!pip install transformers accelerate scikit-learn matplotlib tqdm
-# then import and call syco_steering.pipeline.run_pipeline("outputs")
 ```
 
 ## Artifacts (`outputs/`)
