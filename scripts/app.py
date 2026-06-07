@@ -1,7 +1,7 @@
 """Modal app for GPU runs: `modal run scripts/app.py`.
 
 First-time setup:
-    uv sync --extra modal      # or: pip install modal
+    uv pip install modal       # launcher CLI (not a project dependency)
     modal setup                # authenticate
 
 Run:        modal run scripts/app.py
@@ -34,7 +34,9 @@ outputs = modal.Volume.from_name("syco-outputs", create_if_missing=True)
 
 
 @app.function(
-    gpu="L4",
+    # T4 (16 GB) is Modal's smallest/cheapest GPU and is plenty for a 1.5B model
+    # in fp16. Bump to "L4" if you ever hit out-of-memory.
+    gpu="T4",
     image=image,
     volumes={"/root/.cache/huggingface": hf_cache, "/outputs": outputs},
     timeout=60 * 30,
