@@ -84,14 +84,15 @@ modal volume get syco-outputs / ./outputs   # retrieve artifacts
 
 ### Google Colab (no Rust, no GPU box needed)
 
-The easiest GPU path. Open [`notebooks/extract_sycophancy_colab.ipynb`](notebooks/extract_sycophancy_colab.ipynb)
-in Colab, set the runtime to GPU, and run all cells — it clones the repo, runs the
-pipeline, checks the acceptance criteria, shows the plots, and downloads the
-artifacts:
+The easiest GPU path. [`notebooks/extract_sycophancy_colab.ipynb`](notebooks/extract_sycophancy_colab.ipynb)
+is **fully self-contained** — it writes the `syco_steering` package to disk via
+`%%writefile` cells, so it clones/pulls nothing from GitHub. Upload it to
+[Colab](https://colab.research.google.com/) (*File → Upload notebook*), set the
+runtime to GPU, and *Run all*: it installs deps, runs the pipeline, checks the
+acceptance criteria, shows the plots, and downloads the artifacts.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/frnkly/ml4g-activation-steering/blob/feat/steering-vector/notebooks/extract_sycophancy_colab.ipynb)
-
-(Update the badge branch from `feat/steering-vector` to `main` once merged.)
+> Because it embeds the source, keep the notebook in sync with `src/syco_steering/`
+> if you change the modules.
 
 ### Local Linux GPU box
 
