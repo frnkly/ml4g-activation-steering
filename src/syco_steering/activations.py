@@ -41,20 +41,30 @@ def completion_acts(model, tok, user: str, completion: str) -> np.ndarray:
     """
     import torch
 
+    def _ids(out):
+        # Recent transformers return a BatchEncoding dict from apply_chat_template;
+        # older versions return a bare tensor. Normalize to the input_ids tensor.
+        ids = out if isinstance(out, torch.Tensor) else out["input_ids"]
+        return ids.to(model.device)
+
     with torch.no_grad():
-        p_ids = tok.apply_chat_template(
-            [{"role": "user", "content": user}],
-            add_generation_prompt=True,
-            return_tensors="pt",
-        ).to(model.device)
-        f_ids = tok.apply_chat_template(
-            [
-                {"role": "user", "content": user},
-                {"role": "assistant", "content": completion},
-            ],
-            add_generation_prompt=False,
-            return_tensors="pt",
-        ).to(model.device)
+        p_ids = _ids(
+            tok.apply_chat_template(
+                [{"role": "user", "content": user}],
+                add_generation_prompt=True,
+                return_tensors="pt",
+            )
+        )
+        f_ids = _ids(
+            tok.apply_chat_template(
+                [
+                    {"role": "user", "content": user},
+                    {"role": "assistant", "content": completion},
+                ],
+                add_generation_prompt=False,
+                return_tensors="pt",
+            )
+        )
         plen = p_ids.shape[1]  # completion starts here
         out = model(f_ids, output_hidden_states=True)
         # (L+1, comp_len, d) — slice batch item 0 and completion tokens only.
