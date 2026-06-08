@@ -1,7 +1,7 @@
 [project]
 name = "ml4g-activation-steering"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sycophancy steering-vector extraction (logistic-regression probe on contrastive activations)"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -9,10 +9,34 @@ dependencies = [
     "numpy>=2.4.6",
     "scikit-learn>=1.9.0",
     "transformers>=5.10.2",
+    "tqdm>=4.67.0",
 ]
 
 [project.optional-dependencies]
+# PyTorch is heavy and needs a GPU to be useful here, so keep it optional.
+# Locally (e.g. macOS) the "light" stack runs the probe/validate code and tests
+# on synthetic activations; the full pipeline runs on a Linux GPU box or Modal.
 gpu = [
     "accelerate>=1.13.0 ; sys_platform == 'linux'",
     "torch>=2.12.0 ; sys_platform == 'linux'",
 ]
+
+# NOTE: `modal` is intentionally NOT a project dependency. It is a launcher CLI,
+# not part of the package, and its native transitive deps (e.g. cbor2) have no
+# macOS x86_64 wheels for recent CPython, so adding it here breaks `uv sync` on
+# Intel Macs. Install it separately to run the GPU job — see the README.
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/syco_steering"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

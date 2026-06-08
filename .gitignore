@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project artifacts (keep metrics.json in version control)
+outputs/*
+!outputs/metrics.json
+*.npz
+*.png
