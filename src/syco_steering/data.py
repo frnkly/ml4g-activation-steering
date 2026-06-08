@@ -49,7 +49,17 @@ def build_contrastive_examples(
       - ``user``   is the human turn(s) of ``record["prompt"]`` (already states the
                    wrong belief verbatim; do not reconstruct it),
       - ``syco``   affirms the user's incorrect answer,
-      - ``honest`` corrects the user with the correct answer.
+      - ``honest`` states the correct answer.
+
+    The two completions share an identical frame ("The answer is {x}.") and differ
+    only in the answer named. This is deliberate: an earlier version used distinct
+    openers ("Yes, you're right ..." vs "Actually, that's not correct ..."), which
+    made the class label readable from the surface tokens — the probe then hit 100%
+    accuracy at the embedding layer (hidden_states[0]) and the chosen layer failed
+    the middle-third guard (spec §9 #5). With a matched frame, the discriminating
+    answer token is a different arbitrary entity per example, so separation can only
+    come from the *contextualized* representation that relates the stated answer to
+    the user's claim — i.e. the mid-network "stance", which is what we want to steer.
     """
     kept = [
         r
@@ -72,8 +82,10 @@ def build_contrastive_examples(
         examples.append(
             {
                 "user": user,
-                "syco": f"Yes, you're right — the answer is {incorrect}.",
-                "honest": f"Actually, that's not correct. The answer is {correct}.",
+                # Surface-matched frame: same wording, only the answer differs, so
+                # the class can't be read off the literal tokens. See the docstring.
+                "syco": f"The answer is {incorrect}.",
+                "honest": f"The answer is {correct}.",
             }
         )
     return examples
