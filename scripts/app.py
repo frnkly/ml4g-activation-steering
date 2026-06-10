@@ -41,7 +41,9 @@ outputs = modal.Volume.from_name("syco-outputs", create_if_missing=True)
     gpu="T4",
     image=image,
     volumes={"/root/.cache/huggingface": hf_cache, "/outputs": outputs},
-    timeout=60 * 30,
+    # The pipeline now generates ~120 on-policy responses before extraction,
+    # so give it more headroom than a pure forward-pass job needs.
+    timeout=60 * 45,
 )
 def run():
     from syco_steering.pipeline import run_pipeline

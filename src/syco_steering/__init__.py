@@ -1,8 +1,9 @@
-"""Sycophancy steering-vector extraction.
+"""Sycophancy steering-vector extraction (arXiv 2604.08169, adapted to sycophancy).
 
-Phase 1: derive a steering direction from a binary logistic-regression probe
-trained on contrastive (sycophantic vs. honest) activations. See
-IMPLEMENTATION_SPEC.md for the method and acceptance criteria.
+Derives a steering direction from a binary logistic-regression probe trained on
+per-token activations of the model's own responses generated under a
+sycophancy-inducing vs. an honesty-inducing system prompt. See README.md for the
+method and acceptance criteria.
 """
 
 __all__ = ["config"]

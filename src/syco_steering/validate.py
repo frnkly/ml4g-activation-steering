@@ -1,4 +1,4 @@
-"""Held-out metrics, projection histogram, and the CAA-cosine robustness check.
+"""Held-out metrics, projection histogram, and the CAA-cosine consistency check.
 
 torch-free. Uses a non-interactive matplotlib backend so it works headless (Modal).
 """
@@ -14,21 +14,24 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from sklearn.linear_model import LogisticRegression  # noqa: E402
 from sklearn.metrics import roc_auc_score  # noqa: E402
-from sklearn.model_selection import train_test_split  # noqa: E402
 
-from .probe import _stack_xy  # noqa: E402
+from .probe import _group_split, stack_tokens  # noqa: E402
 
 
-def _caa_direction(H_honest: np.ndarray, H_syco: np.ndarray, layer: int) -> np.ndarray:
+def _caa_direction(X_honest: np.ndarray, X_syco: np.ndarray, layer: int) -> np.ndarray:
     """Contrastive-activation-addition direction: normalized mean difference
-    (honest - syco) at ``layer``."""
-    d = H_honest[:, layer].mean(0) - H_syco[:, layer].mean(0)
+    (honest - syco) over tokens at ``layer``."""
+    d = X_honest[:, layer].astype(np.float32).mean(0) - X_syco[:, layer].astype(
+        np.float32
+    ).mean(0)
     return d / np.linalg.norm(d)
 
 
 def validate(
-    H_honest: np.ndarray,
-    H_syco: np.ndarray,
+    X_honest: np.ndarray,
+    X_syco: np.ndarray,
+    g_honest: np.ndarray,
+    g_syco: np.ndarray,
     layer: int,
     direction: dict,
     out_dir: str,
@@ -37,48 +40,51 @@ def validate(
 ) -> dict:
     """Compute held-out metrics and save plots to ``out_dir``.
 
-    (a) held-out test accuracy + AUROC at ``layer`` on a fresh stratified split
-        with a different seed than the sweep,
-    (b) projection histogram of both classes with boundary ``m`` -> projection_hist.png,
-    (c) cosine(v_hat, CAA mean-difference direction) -> robustness.
+    (a) held-out test accuracy + AUROC at ``layer`` on a fresh GROUP-aware split
+        with a different seed than the sweep. Caveat: the layer itself was
+        selected on this same data, so the reported numbers carry a mild
+        selection-bias optimism; treat them as sanity checks, not unbiased
+        estimates.
+    (b) per-token projection histogram of both classes with boundary ``m``
+        -> projection_hist.png,
+    (c) cosine(v_hat, CAA mean-difference direction) -> consistency. Both
+        vectors come from the same activations, so this checks probe/CAA
+        agreement only — it cannot detect confounds shared by both.
 
     Also saves the layer-sweep accuracy curve -> layer_acc.png (pass ``accs`` in;
-    they are recomputed per layer if omitted).
+    they are recomputed if omitted).
     """
     os.makedirs(out_dir, exist_ok=True)
 
     # (a) Fresh held-out split with a seed distinct from the sweep's.
-    X, y = _stack_xy(H_honest, H_syco, layer)
-    test_seed = sweep_seed + 1
-    X_tr, X_te, y_tr, y_te = train_test_split(
-        X, y, test_size=0.25, stratify=y, random_state=test_seed
-    )
+    X, y, groups = stack_tokens(X_honest, X_syco, g_honest, g_syco, layer)
+    X_tr, X_te, y_tr, y_te = _group_split(X, y, groups, sweep_seed + 1)
     clf = LogisticRegression(C=1.0, max_iter=2000)
     clf.fit(X_tr, y_tr)
     test_acc = float(clf.score(X_te, y_te))
     auroc = float(roc_auc_score(y_te, clf.decision_function(X_te)))
 
-    # (c) CAA cosine robustness check.
+    # (c) CAA cosine consistency check.
     v_hat = np.asarray(direction["v_hat"], dtype=np.float64)
-    caa = _caa_direction(H_honest, H_syco, layer)
+    caa = _caa_direction(X_honest, X_syco, layer)
     caa_cosine = float(np.dot(v_hat, caa) / (np.linalg.norm(v_hat) * np.linalg.norm(caa)))
 
-    # (b) Projection histogram with the decision boundary m.
-    proj_honest = H_honest[:, layer] @ v_hat
-    proj_syco = H_syco[:, layer] @ v_hat
+    # (b) Per-token projection histogram with the decision boundary m.
+    proj_honest = X_honest[:, layer].astype(np.float32) @ v_hat
+    proj_syco = X_syco[:, layer].astype(np.float32) @ v_hat
     m = float(direction["m"])
     fig, ax = plt.subplots(figsize=(7, 4))
     bins = np.linspace(
         min(proj_honest.min(), proj_syco.min()),
         max(proj_honest.max(), proj_syco.max()),
-        30,
+        40,
     )
-    ax.hist(proj_syco, bins=bins, alpha=0.6, label="sycophantic (0)", color="tab:red")
-    ax.hist(proj_honest, bins=bins, alpha=0.6, label="honest (1)", color="tab:blue")
+    ax.hist(proj_syco, bins=bins, alpha=0.6, label="sycophantic tokens (0)", color="tab:red")
+    ax.hist(proj_honest, bins=bins, alpha=0.6, label="honest tokens (1)", color="tab:blue")
     ax.axvline(m, color="k", linestyle="--", label=f"boundary m = {m:.2f}")
-    ax.set_xlabel(r"projection onto $\hat{v}$")
+    ax.set_xlabel(r"token projection onto $\hat{v}$")
     ax.set_ylabel("count")
-    ax.set_title(f"Projection separation at layer {layer}")
+    ax.set_title(f"Per-token projection separation at layer {layer}")
     ax.legend()
     fig.tight_layout()
     proj_path = os.path.join(out_dir, "projection_hist.png")
@@ -89,13 +95,13 @@ def validate(
     if accs is None:
         from .probe import layer_sweep
 
-        accs, _ = layer_sweep(H_honest, H_syco, sweep_seed)
+        accs, _ = layer_sweep(X_honest, X_syco, g_honest, g_syco, sweep_seed)
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(range(len(accs)), accs, marker="o")
     ax.axvline(layer, color="tab:green", linestyle="--", label=f"selected layer {layer}")
     ax.set_xlabel("hidden_states layer index")
-    ax.set_ylabel("held-out accuracy")
-    ax.set_title("Layer sweep (probe accuracy)")
+    ax.set_ylabel("held-out token accuracy")
+    ax.set_title("Layer sweep (per-token probe accuracy)")
     ax.legend()
     fig.tight_layout()
     layer_path = os.path.join(out_dir, "layer_acc.png")
