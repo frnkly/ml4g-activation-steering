@@ -89,14 +89,15 @@ uv run modal volume get syco-outputs / ./outputs   # retrieve artifacts
 
 ### Google Colab (no Rust, no GPU box needed)
 
-The easiest GPU path. [`notebooks/extract_sycophancy_colab.ipynb`](notebooks/extract_sycophancy_colab.ipynb)
+The easiest GPU path. [`notebooks/sycophancy_steering.ipynb`](notebooks/sycophancy_steering.ipynb)
 is **fully self-contained** — every step is plain inline code (no cloning, no
 imports from this repo, nothing written to disk during the run). Upload it to
 [Colab](https://colab.research.google.com/) (*File → Upload notebook*), set the
-runtime to GPU, and *Run all*: it walks through loading data, the model,
-activations, the probe, and validation, rendering the plots inline and checking
-the acceptance criteria. A final optional cell exports the artifacts if you want
-them.
+runtime to GPU, and *Run all*. It replicates **both halves** of the paper:
+**Part A** loads the data and model, extracts activations, fits the probe, and
+validates the direction against the acceptance criteria (plots inline); **Part B**
+hooks the extraction layer and steers generation (SwFC / StTP / StMP), then
+measures the effect on held-out prompts.
 
 > The notebook restates the pipeline logic standalone, so keep it in sync with
 > `src/syco_steering/` if you change the modules.
