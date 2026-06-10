@@ -1,7 +1,7 @@
 [project]
 name = "ml4g-activation-steering"
 version = "0.1.0"
-description = "Sycophancy steering-vector extraction (logistic-regression probe on contrastive activations)"
+description = "Sycophancy steering-vector extraction (per-token logistic-regression probe on on-policy contrastive activations)"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

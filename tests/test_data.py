@@ -1,7 +1,7 @@
-"""Tests for template filtering and contrastive-example construction (no network)."""
+"""Tests for template filtering and prompt-set construction (no network)."""
 
 from syco_steering import config
-from syco_steering.data import build_contrastive_examples
+from syco_steering.data import build_prompt_sets
 
 TEMPLATE = config.WRONG_BELIEF_TEMPLATE
 
@@ -27,9 +27,9 @@ def test_filters_to_target_template():
         _record("other template", user="C"),
         _record(TEMPLATE, user="D"),
     ]
-    examples = build_contrastive_examples(records, TEMPLATE, n=10, seed=0)
-    assert len(examples) == 2
-    users = {e["user"] for e in examples}
+    train, evalset = build_prompt_sets(records, TEMPLATE, n_train=10, n_eval=10, seed=0)
+    assert len(train) + len(evalset) == 2
+    users = {p["user"] for p in train + evalset}
     assert users == {"A", "D"}
 
 
@@ -37,23 +37,30 @@ def test_drops_records_missing_answers():
     good = _record(TEMPLATE, user="good")
     missing_incorrect = _record(TEMPLATE, user="bad")
     missing_incorrect["base"]["incorrect_answer"] = ""
-    examples = build_contrastive_examples([good, missing_incorrect], TEMPLATE, n=10, seed=0)
-    assert len(examples) == 1
-    assert examples[0]["user"] == "good"
+    train, evalset = build_prompt_sets(
+        [good, missing_incorrect], TEMPLATE, n_train=10, n_eval=10, seed=0
+    )
+    assert len(train) + len(evalset) == 1
+    assert (train + evalset)[0]["user"] == "good"
 
 
-def test_completions_reference_correct_and_incorrect():
+def test_prompts_carry_answers_verbatim():
     records = [_record(TEMPLATE, correct="Paris", incorrect="London")]
-    [ex] = build_contrastive_examples(records, TEMPLATE, n=1, seed=0)
-    assert "London" in ex["syco"] and "Paris" not in ex["syco"]
-    assert "Paris" in ex["honest"] and "London" not in ex["honest"]
+    train, _ = build_prompt_sets(records, TEMPLATE, n_train=1, n_eval=0, seed=0)
+    [p] = train
+    assert p["correct"] == "Paris"
+    assert p["incorrect"] == "London"
     # User turn is taken verbatim, not reconstructed.
-    assert ex["user"] == "Q? hint."
+    assert p["user"] == "Q? hint."
 
 
-def test_cap_and_determinism():
+def test_split_sizes_disjoint_and_deterministic():
     records = [_record(TEMPLATE, user=f"u{i}") for i in range(50)]
-    a = build_contrastive_examples(records, TEMPLATE, n=10, seed=0)
-    b = build_contrastive_examples(records, TEMPLATE, n=10, seed=0)
-    assert len(a) == 10
-    assert [e["user"] for e in a] == [e["user"] for e in b]  # same seed -> same order
+    train_a, eval_a = build_prompt_sets(records, TEMPLATE, n_train=10, n_eval=5, seed=0)
+    train_b, eval_b = build_prompt_sets(records, TEMPLATE, n_train=10, n_eval=5, seed=0)
+    assert len(train_a) == 10 and len(eval_a) == 5
+    # Train and eval are disjoint.
+    assert {p["user"] for p in train_a}.isdisjoint({p["user"] for p in eval_a})
+    # Same seed -> same order.
+    assert [p["user"] for p in train_a] == [p["user"] for p in train_b]
+    assert [p["user"] for p in eval_a] == [p["user"] for p in eval_b]

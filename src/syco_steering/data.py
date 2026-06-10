@@ -1,7 +1,13 @@
-"""Load the sycophancy `answer.jsonl` dataset and build contrastive examples.
+"""Load the sycophancy `answer.jsonl` dataset and build prompt sets.
 
 This module is intentionally torch-free so it can be exercised locally and in
 tests without a model or GPU.
+
+The contrastive *texts* are no longer templated completions: following the paper
+(arXiv 2604.08169), the probe is trained on the model's own responses generated
+under a sycophancy-inducing vs. an honesty-inducing system prompt (see
+`activations.generate_responses`). This module only selects and splits the user
+prompts those responses are generated for.
 """
 
 from __future__ import annotations
@@ -26,40 +32,30 @@ def _ssl_context() -> ssl.SSLContext | None:
 def load_records(url: str) -> list[dict]:
     """Download `answer.jsonl` and parse one JSON object per line.
 
-    Top-level keys per record: `prompt`, `base`, `metadata` (see spec §6).
+    Top-level keys per record: `prompt`, `base`, `metadata`.
     """
     with urllib.request.urlopen(url, context=_ssl_context()) as resp:
         text = resp.read().decode("utf-8")
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def build_contrastive_examples(
+def build_prompt_sets(
     records: list[dict],
     template: str,
-    n: int,
+    n_train: int,
+    n_eval: int,
     seed: int,
-) -> list[dict]:
-    """Filter to the target template, then build contrastive completions.
+) -> tuple[list[dict], list[dict]]:
+    """Filter to the target template and split into train / eval prompt sets.
 
     Keep only rows whose ``metadata.prompt_template == template`` AND that carry
     both ``base.correct_answer`` and ``base.incorrect_answer``. Shuffle with
-    ``seed`` and take the first ``n``.
+    ``seed``, then take the first ``n_train`` rows as the probe-training prompts
+    and the next ``n_eval`` rows as the disjoint held-out steering-eval prompts.
 
-    Returns dicts ``{"user", "syco", "honest"}`` where:
-      - ``user``   is the human turn(s) of ``record["prompt"]`` (already states the
-                   wrong belief verbatim; do not reconstruct it),
-      - ``syco``   affirms the user's incorrect answer,
-      - ``honest`` states the correct answer.
-
-    The two completions share an identical frame ("The answer is {x}.") and differ
-    only in the answer named. This is deliberate: an earlier version used distinct
-    openers ("Yes, you're right ..." vs "Actually, that's not correct ..."), which
-    made the class label readable from the surface tokens — the probe then hit 100%
-    accuracy at the embedding layer (hidden_states[0]) and the chosen layer failed
-    the middle-third guard (spec §9 #5). With a matched frame, the discriminating
-    answer token is a different arbitrary entity per example, so separation can only
-    come from the *contextualized* representation that relates the stated answer to
-    the user's claim — i.e. the mid-network "stance", which is what we want to steer.
+    Each returned dict is ``{"user", "correct", "incorrect"}`` where ``user`` is
+    the human turn(s) of ``record["prompt"]`` taken verbatim (it already states
+    the wrong belief; do not reconstruct it).
     """
     kept = [
         r
@@ -70,22 +66,16 @@ def build_contrastive_examples(
     ]
     rng = random.Random(seed)
     rng.shuffle(kept)
-    kept = kept[:n]
 
-    examples: list[dict] = []
-    for r in kept:
-        user = "\n\n".join(
-            turn["content"] for turn in r["prompt"] if turn.get("type") == "human"
-        )
-        correct = r["base"]["correct_answer"]
-        incorrect = r["base"]["incorrect_answer"]
-        examples.append(
-            {
-                "user": user,
-                # Surface-matched frame: same wording, only the answer differs, so
-                # the class can't be read off the literal tokens. See the docstring.
-                "syco": f"The answer is {incorrect}.",
-                "honest": f"The answer is {correct}.",
-            }
-        )
-    return examples
+    def to_prompt(r: dict) -> dict:
+        return {
+            "user": "\n\n".join(
+                turn["content"] for turn in r["prompt"] if turn.get("type") == "human"
+            ),
+            "correct": r["base"]["correct_answer"],
+            "incorrect": r["base"]["incorrect_answer"],
+        }
+
+    train = [to_prompt(r) for r in kept[:n_train]]
+    evalset = [to_prompt(r) for r in kept[n_train : n_train + n_eval]]
+    return train, evalset
