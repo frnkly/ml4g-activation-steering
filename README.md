@@ -17,23 +17,40 @@ Following the paper's design:
    states a wrong belief — so affirming it is genuinely *sycophantic* rather than
    merely wrong). Training on on-policy generations means the probe's activations
    match the distribution the steering gate sees at inference.
-2. **Per-token probe.** A logistic-regression probe is fit on **individual
-   response-token activations** (group-aware splits keep whole responses on one
-   side). Its weight vector gives the steering direction `v̂`, its bias the
-   decision boundary `m = −b/‖w‖`, and the honest-token projections give
-   `μ⁺, σ⁺`. The boundary must be calibrated per token: the selective steering
-   methods compare *individual token states* to `m`, and a boundary fit on pooled
-   (mean) activations sits in a far tighter distribution, so the gate would
-   essentially never fire.
+2. **Response-averaged probe (paper Eq. 1).** Each response contributes one
+   training example: the *mean* hidden state over its response tokens at layer
+   ℓ. A logistic-regression probe on these pooled embeddings gives the steering
+   direction `v̂` (normalized weights), the decision boundary `m = −b/‖w‖`
+   (the paper's Alg. A.1 rescaling reduces to exactly this), and the pooled
+   projection stats `μ⁺, σ⁺, Δμ`. The inference-time StTP/StMP gate still
+   compares *individual token* projections to `m` — this calibration transfers
+   because averaging shrinks the within-class variance but leaves the class
+   means unchanged, so the pooled boundary sits between the same means the
+   (wider) per-token distributions straddle. A token-level probe sweep is kept
+   as a cheap layer-shortlist heuristic and for gate diagnostics.
 3. **Steering** (notebook Part B): a forward hook on the extraction layer
-   implements the paper's three methods — **SwFC** (`h' = h + α·v̂` on every
-   generated token), **StTP** (tokens with projection `ρ < m` are set to the
-   target `μ⁺ + α·σ⁺`), and **StMP** (tokens with `ρ < m` are reflected across
-   the boundary: `h' = h + 2α(m − ρ)·v̂`).
-4. **Validation / evaluation:** held-out probe accuracy + AUROC, a per-token
-   projection histogram, a CAA-cosine consistency check, a gate-firing diagnostic
-   on fresh generations, an α sweep on prompts disjoint from the final eval, and
-   a held-out comparison against both the aligned and misaligned baselines.
+   implements the paper's three methods in the paper's parameterization —
+   **SwFC** (`h' = h + α·Δμ·v̂`; α = 1 is one unit of class separation),
+   **StTP** (tokens with projection `ρ < m` are set to the target `μ⁺ + α·σ⁺`;
+   σ⁺ is the pooled std, so the paper's α grid runs to 36), and **StMP**
+   (tokens with `ρ < m` are reflected across the boundary:
+   `h' = h + 2α(m − ρ)·v̂`). Steering position defaults to the paper's
+   **all-token** mode (every position, prompt prefill included — the mode
+   behind all of the paper's headline results); response-only steering is kept
+   as the ablation, which the paper shows recovers roughly half the trait
+   score (Table C.1).
+4. **Validation / evaluation:** held-out pooled-probe accuracy + AUROC,
+   pooled + per-token projection histograms, a CAA-cosine consistency check,
+   a gate-firing diagnostic on fresh generations, an α sweep over the paper's
+   coefficient grids on prompts disjoint from the final eval, and a held-out
+   comparison against both baselines — scored with string proxies plus two of
+   the paper's judge-free metrics: cross-entropy under the unsteered model
+   conditioned on the aligned prompt (§C.3) and embedding similarity to the
+   aligned baseline's responses (§C.5).
+
+See [`docs/paper-replication-review.md`](docs/paper-replication-review.md) for
+a detailed comparison of this implementation against the paper, including the
+reasoning behind each of the choices above.
 
 ## Setup
 
@@ -128,7 +145,9 @@ uv run python scripts/extract_local.py   # writes ./outputs
 ## Artifacts (`outputs/`)
 
 - `steering_vector.npz` — `v_hat`, `steering_vector`, `m`, `mu_pos`, `sig_pos`,
-  `delta_mu`, `best_layer`, `model`.
+  `delta_mu`, `best_layer`, `model`. The projection statistics are in
+  response-averaged units (paper Eq. 1) — coefficients like StTP's α multiply
+  the *pooled* σ⁺, which is why the paper's α grid runs to 36.
 - `responses.json` — the generated contrastive training responses, for inspection.
 - `metrics.json` — layer-sweep accuracies, `best_layer`, `test_acc`, `auroc`,
   `caa_cosine`, token counts (kept in version control).
@@ -141,13 +160,21 @@ steering hook attaches to `model.model.layers[best_layer - 1]`.
 
 ## Known limitations vs. the paper
 
-- The paper runs Llama-3.3-70B-Instruct and Qwen3-32B; linear trait structure is
-  cleaner at scale, so expect noisier results from a 1.5B model.
-- Trait and coherence are scored with string/repetition proxies instead of the
-  paper's LLM judge (GPT-oss-120B), ELO tournament, and capability suite
-  (MMLU / MT-Bench / AlpacaEval).
-- The steering layer is the probe's best layer; the paper picks an operating
-  point over a full layer × coefficient grid.
-- The probe may partly encode "which system prompt is in context" rather than
-  the trait itself — a limitation shared with the paper's design, since both
-  sides of the contrast differ in the system prompt.
+- The paper runs Llama-3.3-70B-Instruct and Qwen3.6-27B; linear trait structure
+  is cleaner at scale, so expect noisier results from a 1.5B model.
+- Trait and coherence are scored with string/repetition proxies plus two of the
+  paper's judge-free metrics (cross-entropy vs. the aligned model, embedding
+  similarity to the aligned baseline) instead of the paper's LLM judge
+  (GPT-oss-120B), ELO tournament, and capability suite (MMLU / MT-Bench /
+  AlpacaEval).
+- Decoding is greedy at 60–80 tokens; the paper samples at T=0.6 / top-p=0.9
+  up to 1024 tokens, where the long-generation repetition pathology that
+  separates StTP/StMP from SwFC actually shows up.
+- The steering layer is the probe-shortlisted layer; the paper picks an
+  operating point over a full layer × coefficient × position grid judged on
+  trait + coherence (its own selection rule, and the highest-value next step).
+- Both sides of the contrast use a single fixed system-prompt pair, so the
+  probe may partly encode "which system prompt is in context" rather than the
+  trait itself. The paper mitigates (not eliminates) this by varying the
+  contrastive prompts across scenarios — 5 paraphrase variants for
+  dismissiveness, per-scenario prompts for dishonesty.

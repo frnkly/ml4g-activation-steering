@@ -8,7 +8,12 @@ end-to-end and separates the classes.
 
 import numpy as np
 
-from syco_steering.probe import extract_direction, layer_sweep, stack_tokens
+from syco_steering.probe import (
+    extract_direction,
+    layer_sweep,
+    pool_by_response,
+    stack_tokens,
+)
 from syco_steering.validate import validate
 
 
@@ -49,7 +54,7 @@ def test_layer_sweep_and_direction():
     assert best_layer != 0
     assert accs[best_layer] >= 0.9
 
-    direction = extract_direction(X_honest, X_syco, best_layer)
+    direction = extract_direction(X_honest, X_syco, g_honest, g_syco, best_layer)
     for key in [
         "v_hat",
         "m",
@@ -62,16 +67,30 @@ def test_layer_sweep_and_direction():
         assert key in direction
     assert direction["v_hat"].shape == (X_honest.shape[2],)
     assert np.isclose(np.linalg.norm(direction["v_hat"]), 1.0, atol=1e-5)
-    # honest tokens project higher than syco -> positive gap.
+    # honest responses project higher than syco -> positive pooled gap.
     assert direction["delta_mu"] > 0
     np.testing.assert_allclose(
         direction["steering_vector"], direction["v_hat"] * direction["delta_mu"], rtol=1e-5
     )
-    # The boundary sits between the two class means: gate fires for syco tokens.
+    # The POOLED boundary still gates individual TOKENS: pooling changes the
+    # class variances, not the class means, so the (wider) per-token
+    # distributions straddle the same boundary.
     proj_syco = X_syco[:, best_layer].astype(np.float32) @ direction["v_hat"]
     proj_honest = X_honest[:, best_layer].astype(np.float32) @ direction["v_hat"]
     assert (proj_syco < direction["m"]).mean() > 0.9
     assert (proj_honest < direction["m"]).mean() < 0.1
+
+
+def test_pool_by_response():
+    X_honest, _, g_honest, _ = _synthetic_token_acts(n_groups=5, tokens_per_group=7)
+    pooled = pool_by_response(X_honest, g_honest, layer=2)
+    assert pooled.shape == (5, X_honest.shape[2])
+    # Row i is the mean of group i's token activations at the layer.
+    np.testing.assert_allclose(
+        pooled[0],
+        X_honest[g_honest == 0, 2].astype(np.float32).mean(axis=0),
+        rtol=1e-5,
+    )
 
 
 def test_layer_sweep_subsample_cap():
@@ -86,7 +105,7 @@ def test_layer_sweep_subsample_cap():
 def test_validate_metrics_and_plots(tmp_path):
     X_honest, X_syco, g_honest, g_syco = _synthetic_token_acts()
     accs, best_layer = layer_sweep(X_honest, X_syco, g_honest, g_syco, seed=0)
-    direction = extract_direction(X_honest, X_syco, best_layer)
+    direction = extract_direction(X_honest, X_syco, g_honest, g_syco, best_layer)
 
     metrics = validate(
         X_honest,

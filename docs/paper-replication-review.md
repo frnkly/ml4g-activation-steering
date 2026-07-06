@@ -15,6 +15,13 @@ metrics, free-Colab budget) are all reasonable and are **not** treated as
 mistakes — they're listed at the end so the boundary between "wrong" and
 "intentionally smaller" stays sharp.
 
+> **Status:** findings 1–4 and the two judge-free metrics from finding 7 have
+> been applied to `notebooks/sycophancy_steering.ipynb`, `src/syco_steering/`,
+> and `README.md` in a follow-up commit on this branch. Findings 3 (downstream
+> layer × α operating-point selection), 5 (sampled decoding, longer
+> generations), and 6 (diversified contrastive system prompts) remain open —
+> see "Suggested order of changes" at the end.
+
 ---
 
 ## TL;DR
