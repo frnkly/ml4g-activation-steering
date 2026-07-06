@@ -28,8 +28,9 @@ def _set_seeds(seed: int) -> None:
 def run_pipeline(out_dir: str) -> dict:
     """Full flow: load model -> load/filter data -> generate on-policy
     contrastive responses (sycophantic vs. honest system prompt) -> per-token
-    activations -> layer sweep -> extract direction -> validate. Persists
-    artifacts to ``out_dir`` and returns the metrics dict.
+    activations -> token-level layer sweep (shortlist) -> pooled direction
+    extraction (paper Eq. 1) -> validate. Persists artifacts to ``out_dir``
+    and returns the metrics dict.
 
     Artifacts:
       - steering_vector.npz  (v_hat, steering_vector, m, mu_pos, sig_pos,
@@ -81,7 +82,7 @@ def run_pipeline(out_dir: str) -> dict:
         X_honest, X_syco, g_honest, g_syco, config.SEED,
         max_tokens=config.SWEEP_MAX_TOKENS,
     )
-    direction = extract_direction(X_honest, X_syco, best_layer)
+    direction = extract_direction(X_honest, X_syco, g_honest, g_syco, best_layer)
     val = validate(
         X_honest,
         X_syco,

@@ -37,11 +37,12 @@ GEN_BATCH_SIZE = 8  # left-padded batched generation
 SWEEP_MAX_TOKENS = 4000  # token subsample cap per layer-sweep fit (speed)
 SEED = 0
 
-# Acceptance thresholds. These are heuristic floors for a 1.5B model probed at
-# the TOKEN level (harder than pooled-example probing: many response tokens are
-# generic and carry little stance), not the paper's reported numbers.
-MIN_TEST_ACC = 0.75
-MIN_AUROC = 0.85
+# Acceptance thresholds for the POOLED probe (one response-averaged embedding
+# per generation, paper Eq. 1). Pooled classes separate far more cleanly than
+# individual tokens, so the floors are high — but these are still heuristic
+# floors for a 1.5B model, not the paper's reported numbers.
+MIN_TEST_ACC = 0.90
+MIN_AUROC = 0.95
 # Consistency check between the probe direction and the CAA mean-difference
 # direction. NOTE: both are computed from the same activations, so this checks
 # internal consistency only — it cannot detect confounds shared by both.
